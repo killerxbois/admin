@@ -4,27 +4,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NonLiveTV Admin Panel</title>
+    <title>NonLiveTV - Admin Panel</title>
+    <link rel="manifest" href="admin-manifest.json">
     <style>
         body {
+            margin: 0;
             font-family: Arial;
-            background: #111;
+            background: #0e0e0e;
             color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             padding: 20px;
         }
-        input, button, select {
+        h1 {
+            color: red;
+            margin-bottom: 10px;
+        }
+        input, button {
             padding: 10px;
             margin: 5px;
             width: 100%;
             max-width: 400px;
+            background: #1e1e1e;
+            color: #fff;
+            border: none;
+            outline: none;
         }
-        h1 {
-            color: red;
+        button:hover, input:focus {
+            border: 1px solid red;
+        }
+        .box {
+            background: #1e1e1e;
+            padding: 15px;
+            margin: 5px;
+            border-radius: 5px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
         }
         .channel {
-            background: #222;
+            background: #1e1e1e;
             padding: 10px;
             margin: 5px 0;
+            border-radius: 5px;
         }
     </style>
 </head>
@@ -33,90 +56,141 @@
 
     <h1>NonLiveTV Admin Panel</h1>
 
+    <!-- Secure Login -->
     <div id="login">
         <h3>Enter Admin Password:</h3>
         <input type="password" id="password" placeholder="Admin Password">
         <button onclick="checkPassword()">Login</button>
     </div>
 
+    <!-- Panel -->
     <div id="panel" style="display:none;">
-        <h2>Add Channel</h2>
+
+        <!-- Dashboard -->
+        <div class="box">
+            <h2>Dashboard</h2>
+            <p>Total Channels: <b id="totalChannels">0</b></p>
+            <p>Total Favorites (User): <b id="totalFavorites">0</b></p>
+            <button onclick="resetForm()">+ Add New Channel</button>
+            <button onclick="clearFavorites()">Clear All Favorites</button>
+        </div>
+
+        <h2>Add / Edit Channel</h2>
+        <input type="hidden" id="channel_id">
         <input type="text" id="title" placeholder="Channel Title">
-        <input type="text" id="category" placeholder="Category (Movies, Sports, etc)">
+        <input type="text" id="category" placeholder="Category">
         <input type="text" id="thumbnail" placeholder="Thumbnail URL">
-        <input type="text" id="stream" placeholder="M3U8 Stream URL">
-        <button onclick="addChannel()">Add Channel</button>
+        <input type="text" id="stream" placeholder="M3U8 URL">
+        <button onclick="saveChannel()">Save Channel</button>
 
         <h2>All Channels</h2>
         <div id="channels"></div>
 
-        <h2>Danger Zone</h2>
-        <button onclick="clearFavorites()">Clear All Favorites</button>
     </div>
 
     <script>
         const API = "https://sheetdb.io/api/v1/5pgfrwklxip2x";
-        const adminPass = "1234"; // Change this to your own password
+        const adminHash = "81dc9bdb52d04dc20036dbd8313ed055"; // password = 1234 md5
+
+        function md5(s) {
+            return CryptoJS.MD5(s).toString();
+        }
 
         function checkPassword() {
-            if(document.getElementById('password').value === adminPass){
+            if (md5(document.getElementById('password').value) === adminHash) {
                 document.getElementById('login').style.display = 'none';
                 document.getElementById('panel').style.display = 'block';
                 loadChannels();
+                loadFavorites();
             } else {
-                alert("Incorrect Password!");
+                alert("Wrong Password");
             }
         }
 
         function loadChannels() {
-            fetch(API)
-                .then(res => res.json())
-                .then(data => {
-                    let html = "";
-                    data.forEach((ch, i) => {
-                        html += `
-                            <div class="channel">
-                                <b>${ch.title}</b> [${ch.category}]<br>
-                                <small>${ch.stream}</small><br>
-                                <button onclick="deleteChannel('${ch.id}')">Delete</button>
-                            </div>
-                        `;
-                    });
-                    document.getElementById("channels").innerHTML = html;
+            fetch(API).then(res => res.json()).then(data => {
+                document.getElementById("totalChannels").innerText = data.length;
+                let html = "";
+                data.forEach(ch => {
+                    html += `
+                        <div class="channel">
+                            <b>${ch.title}</b> [${ch.category}]<br>
+                            <small>${ch.stream}</small><br>
+                            <button onclick="editChannel('${ch.id}','${ch.title}','${ch.category}','${ch.thumbnail}','${ch.stream}')">Edit</button>
+                            <button onclick="deleteChannel('${ch.id}')">Delete</button>
+                        </div>
+                    `;
                 });
-        }
-
-        function addChannel() {
-            const title = document.getElementById("title").value;
-            const category = document.getElementById("category").value;
-            const thumbnail = document.getElementById("thumbnail").value;
-            const stream = document.getElementById("stream").value;
-
-            if (!title || !category || !thumbnail || !stream) return alert("All fields are required!");
-
-            fetch(API, {
-                method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data: { title, category, thumbnail, stream } })
-            }).then(() => {
-                alert("Channel Added!");
-                loadChannels();
+                document.getElementById("channels").innerHTML = html;
             });
         }
 
+        function loadFavorites() {
+            const favs = JSON.parse(localStorage.getItem('favorites') || '[]');
+            document.getElementById("totalFavorites").innerText = favs.length;
+        }
+
+        function saveChannel() {
+            const id = document.getElementById("channel_id").value;
+            const data = {
+                title: document.getElementById("title").value,
+                category: document.getElementById("category").value,
+                thumbnail: document.getElementById("thumbnail").value,
+                stream: document.getElementById("stream").value
+            };
+            if (!data.title || !data.category || !data.thumbnail || !data.stream) return alert("All fields required!");
+
+            if (id) {
+                fetch(`${API}/id/${id}`, {
+                    method: "PATCH",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data })
+                }).then(() => { alert("Channel Updated!"); resetForm(); loadChannels(); });
+            } else {
+                fetch(API, {
+                    method: "POST",
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data })
+                }).then(() => { alert("Channel Added!"); resetForm(); loadChannels(); });
+            }
+        }
+
+        function editChannel(id, title, category, thumbnail, stream) {
+            document.getElementById("channel_id").value = id;
+            document.getElementById("title").value = title;
+            document.getElementById("category").value = category;
+            document.getElementById("thumbnail").value = thumbnail;
+            document.getElementById("stream").value = stream;
+        }
+
         function deleteChannel(id) {
-            fetch(API + '/id/' + id, { method: "DELETE" })
-                .then(() => {
-                    alert("Channel Deleted!");
-                    loadChannels();
-                });
+            if (confirm("Delete this channel?")) {
+                fetch(`${API}/id/${id}`, { method: "DELETE" }).then(() => { alert("Deleted!"); loadChannels(); });
+            }
         }
 
         function clearFavorites() {
             localStorage.removeItem('favorites');
-            alert("All Favorites Cleared!");
+            alert("Favorites cleared!");
+            loadFavorites();
+        }
+
+        function resetForm() {
+            document.getElementById("channel_id").value = "";
+            document.getElementById("title").value = "";
+            document.getElementById("category").value = "";
+            document.getElementById("thumbnail").value = "";
+            document.getElementById("stream").value = "";
         }
     </script>
-</body>
 
-</html>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('admin-sw.js');
+        }
+    </script>
+
+</body>
+            </html>
