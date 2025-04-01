@@ -1,8 +1,0 @@
-{
-    "name": "NonLiveTV Admin Panel",
-    "short_name": "Admin Panel",
-    "start_url": "admin.html",
-    "display": "standalone",
-    "background_color": "#0e0e0e",
-    "theme_color": "#e50914"
-}
